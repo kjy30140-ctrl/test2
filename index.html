@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>교원 호봉 계산기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif+KR:wght@600;800&display=swap">
+<style>
+/* Layout: 입력 폼(좌) + 칠판 모양 결과 패널(우, 데스크톱에서 고정). 좁은 화면은 한 열 + 하단 요약 바. */
+:root {
+  --bg: #EDF1EF;
+  --surface: #FFFFFF;
+  --field: #F6F9F7;
+  --ink: #13201B;
+  --muted: #55655E;
+  --line: #D1DBD6;
+  --accent: #1E5A47;
+  --accent-ink: #FFFFFF;
+  --board: #1B3A30;
+  --chalk: #F1F5EE;
+  --chalk-dim: #A8BDB1;
+  --warn: #8A5300;
+  --warn-bg: #FFF1D6;
+  --f-body: "Noto Sans KR", system-ui, -apple-system, "Malgun Gothic", sans-serif;
+  --f-display: "Noto Serif KR", "Batang", serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E1512; --surface: #16211D; --field: #0F1915; --ink: #E5EEE9; --muted: #92A59B;
+    --line: #2A3A33; --accent: #72C6A4; --accent-ink: #0A1A13; --board: #1F4A3B;
+    --chalk: #F1F5EE; --chalk-dim: #A8BDB1; --warn: #F0B45A; --warn-bg: #2D2312;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E1512; --surface: #16211D; --field: #0F1915; --ink: #E5EEE9; --muted: #92A59B;
+  --line: #2A3A33; --accent: #72C6A4; --accent-ink: #0A1A13; --board: #1F4A3B;
+  --chalk: #F1F5EE; --chalk-dim: #A8BDB1; --warn: #F0B45A; --warn-bg: #2D2312;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+:root { color-scheme: light; }
+body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.55;
+  padding-block: 28px 96px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page { max-width: 1060px; margin: 0 auto; }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+h1 { font-family: var(--f-display); font-weight: 800; font-size: 1.9rem; line-height: 1.2; margin: 0 0 4px; text-wrap: balance; }
+.sub { margin: 0; color: var(--muted); max-width: 52ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 3px; gap: 2px; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label { padding: 7px 14px; border-radius: 6px; cursor: pointer; font-weight: 500; color: var(--muted); }
+.seg input:checked + label { background: var(--accent); color: var(--accent-ink); }
+.seg input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 2px; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; align-items: start; }
+.inputs { display: grid; gap: 16px; min-width: 0; }
+section.box { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; min-width: 0; }
+h2 { font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 14px; font-weight: 700; }
+.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+label.f { display: grid; gap: 5px; font-size: 0.84rem; color: var(--muted); font-weight: 500; min-width: 0; }
+select, input[type=date], input[type=number] {
+  font: inherit; color: var(--ink); background: var(--field); border: 1px solid var(--line); border-radius: 7px;
+  padding: 8px 10px; width: 100%; min-width: 0;
+}
+select:focus-visible, input:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.hint { font-size: 0.8rem; color: var(--muted); margin: 10px 0 0; }
+.row { border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: grid; gap: 12px; background: var(--field); min-width: 0; }
+.row + .row { margin-top: 12px; }
+.row-head { display: flex; justify-content: space-between; align-items: center; }
+.rn { font-weight: 700; font-size: 0.85rem; }
+.row .fields { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.row select, .row input { background: var(--surface); }
+.line { font-size: 0.85rem; color: var(--ink); font-variant-numeric: tabular-nums; padding-top: 10px; border-top: 1px dashed var(--line); }
+.line .ex { color: var(--warn); }
+.line .bad { color: var(--warn); }
+button { font: inherit; cursor: pointer; border-radius: 7px; padding: 8px 14px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 500; }
+button.ghost { border-color: transparent; color: var(--muted); padding: 4px 8px; background: transparent; }
+button.ghost:hover { color: var(--ink); text-decoration: underline; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.check { display: flex; gap: 10px; align-items: start; font-size: 0.9rem; }
+.check input { margin-top: 4px; accent-color: var(--accent); }
+.example { font-size: 0.8rem; color: var(--warn); background: var(--warn-bg); padding: 6px 10px; border-radius: 6px; margin-bottom: 12px; }
+aside { position: sticky; top: max(16px, env(safe-area-inset-top, 0px)); min-width: 0; }
+.board { background: var(--board); color: var(--chalk); border-radius: 12px; padding: 22px; border: 6px solid #6B4F2F; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06); }
+.board h2 { color: var(--chalk-dim); }
+.big { font-family: var(--f-display); font-weight: 800; font-size: 4.2rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.big small { font-size: 1.4rem; font-weight: 600; margin-left: 4px; }
+.formula { margin: 14px 0 0; font-variant-numeric: tabular-nums; color: var(--chalk-dim); font-size: 0.9rem; }
+.formula b { color: var(--chalk); font-weight: 700; }
+dl.facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 18px 0 0; padding-top: 16px; border-top: 1px dashed rgba(241,245,238,0.3); font-variant-numeric: tabular-nums; }
+dl.facts dt { color: var(--chalk-dim); font-size: 0.85rem; }
+dl.facts dd { margin: 0; text-align: right; font-weight: 500; }
+.flag { margin-top: 12px; font-size: 0.83rem; background: rgba(240,180,90,0.16); border-radius: 6px; padding: 8px 10px; color: #FFE2B0; }
+.notes { margin-top: 14px; font-size: 0.83rem; color: var(--muted); }
+.notes summary { cursor: pointer; font-weight: 500; color: var(--ink); }
+.notes ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+.bar { display: none; }
+@media (max-width: 860px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  aside { position: static; }
+  .big { font-size: 3.4rem; }
+  .bar {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; align-items: baseline; justify-content: space-between; gap: 12px;
+    background: var(--board); color: var(--chalk);
+    padding-top: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .bar b { font-family: var(--f-display); font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+  .bar span { font-size: 0.85rem; color: var(--chalk-dim); font-variant-numeric: tabular-nums; }
+}
+footer { margin-top: 28px; font-size: 0.8rem; color: var(--muted); max-width: 70ch; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header>
+    <div>
+      <h1>교원 호봉 계산기</h1>
+      <p class="sub">학력, 자격, 경력을 넣으면 초임호봉과 남는 승급 기간을 계산합니다. 교육공무원과 기간제교사에 같은 규정을 적용합니다.</p>
+    </div>
+    <div class="seg" role="radiogroup" aria-label="대상">
+      <input type="radio" name="mode" id="m-reg" value="reg" checked><label for="m-reg">교육공무원</label>
+      <input type="radio" name="mode" id="m-tmp" value="tmp"><label for="m-tmp">기간제교사</label>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="inputs">
+      <section class="box">
+        <h2>자격과 학력</h2>
+        <div class="fields">
+          <label class="f" for="qual">교원자격 (기산호봉)
+            <select id="qual">
+              <option value="9">정교사(1급) · 9</option>
+              <option value="8" selected>정교사(2급) · 8</option>
+              <option value="5">준교사 · 5</option>
+              <option value="5">실기교사 · 5</option>
+              <option value="9">전문상담교사(1급) · 9</option>
+              <option value="8">전문상담교사(2급) · 8</option>
+              <option value="9">사서교사(1급) · 9</option>
+              <option value="8">사서교사(2급) · 8</option>
+              <option value="9">보건교사(1급) · 9</option>
+              <option value="8">보건교사(2급) · 8</option>
+              <option value="9">영양교사(1급) · 9</option>
+              <option value="8">영양교사(2급) · 8</option>
+            </select>
+          </label>
+          <label class="f" for="school">최종학교 (법정 수학연한)
+            <select id="school">
+              <option value="12">고등학교 졸업 · 12년</option>
+              <option value="14">2년제 전문대학 · 14년</option>
+              <option value="15">3년제 전문대학 · 15년</option>
+              <option value="16" selected>4년제 대학·교육대학 · 16년</option>
+              <option value="17">5년제 학과 · 17년</option>
+              <option value="18">6년제 (의·약·한의·치·수의) · 18년</option>
+            </select>
+          </label>
+          <label class="f" for="add">가산연수
+            <select id="add">
+              <option value="0">없음</option>
+              <option value="1" selected>사범계 졸업 · 1년</option>
+              <option value="2">특수교원, 사범계 졸업 · 2년</option>
+              <option value="1">특수교원, 비사범계·양성기관 · 1년</option>
+            </select>
+          </label>
+        </div>
+        <div class="fields" style="margin-top:14px">
+          <label class="f" for="enrol">최종학교 입학일 (선택)<input type="date" id="enrol"></label>
+          <label class="f" for="grad">최종학교 졸업일 (선택)<input type="date" id="grad"></label>
+        </div>
+        <p class="hint">재학 기간과 겹치는 경력은 학력과 중복되어 빠집니다. 2월 졸업은 2월 말까지 재학으로 봅니다. 군복무는 빼지 않습니다.</p>
+      </section>
+
+      <section class="box">
+        <h2>임용 전 경력</h2>
+        <div class="example" id="example">예시 값이 들어 있습니다. 지우고 본인 경력을 입력하세요.</div>
+        <div id="rows"></div>
+        <div class="actions">
+          <button type="button" class="primary" id="add-row">경력 추가</button>
+          <button type="button" class="ghost" id="clear-rows">경력 모두 지우기</button>
+        </div>
+        <p class="hint">종료일은 마지막 근무일입니다. 전역일과 계약 만료일은 포함하고 퇴직일은 뺍니다. 같은 날짜에 겹치는 경력은 환산율이 높은 하나만 인정합니다.</p>
+      </section>
+
+      <section class="box" id="limit-box" hidden>
+        <h2>기간제교사 봉급 제한</h2>
+        <label class="check" for="limit14"><input type="checkbox" id="limit14">
+          <span>10년 이상 근무 후 퇴직연금일시금을 받았거나, 퇴직연금을 받고 있거나, 명예퇴직 또는 정년퇴직을 했습니다. 이 경우 봉급은 14호봉을 넘지 못합니다.</span></label>
+      </section>
+    </div>
+
+    <aside>
+      <div class="board" aria-live="polite">
+        <h2>예상 초임호봉</h2>
+        <div id="out"></div>
+      </div>
+      <details class="notes">
+        <summary>계산 기준과 유의사항</summary>
+        <ul>
+          <li>초임호봉 = 기산호봉 + (학령 − 16) + 가산연수 + 환산 경력 연수</li>
+          <li>경력은 환산율 상한 안에서 계산합니다. 상향 인정 대상은 '직접 입력'에서 올리세요.</li>
+          <li>1년이 안 되는 잔여 기간은 다음 승급기간에 들어갑니다.</li>
+          <li>여러 학교에서 같은 기간에 시간강사로 일했다면 시간을 합산해 한 줄로 넣으세요.</li>
+          <li>기간제교사는 계약기간 중 호봉이 고정되고, 1급 정교사 등 자격이 바뀌면 1호봉만 다시 계산합니다.</li>
+          <li>최종 호봉은 학교의 호봉경력평가심의회를 거쳐 임용권자가 정합니다. 이 결과는 예상치입니다.</li>
+        </ul>
+      </details>
+    </aside>
+  </div>
+
+  <footer>
+    근거: 공무원보수규정 별표 22(경력환산율표), 별표 23(학령 가감), 별표 25(기산호봉), 교육부 예규 제97호(2025. 4. 23.). 규정은 개정될 수 있으므로 호봉 획정 전에 소속 학교 행정실이나 교육지원청에서 확인하세요.
+  </footer>
+</div>
+<div class="bar" id="bar" aria-hidden="true"></div>
+
+<script>
+const DAY = 86400000;
+const toDay = (s) => { const [y, m, d] = s.split('-').map(Number); return Math.floor(Date.UTC(y, m - 1, d) / DAY); };
+const fromDay = (n) => { const t = new Date(n * DAY); return { y: t.getUTCFullYear(), m: t.getUTCMonth() + 1, d: t.getUTCDate() }; };
+function addM(s, k) {
+  const total = s.y * 12 + (s.m - 1) + k;
+  const y = Math.floor(total / 12), m = total % 12;
+  const dim = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  return Math.floor(Date.UTC(y, m, Math.min(s.d, dim)) / DAY);
+}
+function diffYMD(sDay, eExDay) {
+  const s = fromDay(sDay), e = fromDay(eExDay);
+  let months = (e.y - s.y) * 12 + (e.m - s.m);
+  let anchor = addM(s, months);
+  if (anchor > eExDay) { months--; anchor = addM(s, months); }
+  return { M: months, D: eExDay - anchor };
+}
+function norm(x) { let M = x.M + Math.floor(x.D / 30); return { M, D: x.D % 30 }; }
+function convert(M, D, r) {
+  const mn = M * r.n, whole = Math.floor(mn / r.d), rem = mn - whole * r.d;
+  const days = Math.floor((rem * 30 + D * r.n) / r.d);
+  return { M: whole, D: days };
+}
+const TYPES = [
+  { id: 'teacher', label: '교원 (기간제 포함, 자격과 근무학교급 일치)', cap: 100 },
+  { id: 'teacher80', label: '기간제교원 (자격과 근무학교급 불일치)', cap: 80 },
+  { id: 'priv50', label: '관할청에 보고되지 않은 사립학교 교원', cap: 50 },
+  { id: 'gov', label: '교원 외 국가·지방공무원', cap: 100 },
+  { id: 'gov80', label: '고용직공무원', cap: 80 },
+  { id: 'mil', label: '군복무 (현역·상근예비역·사회복무)', cap: 100, military: true },
+  { id: 'milsp', label: '산업기능·전문연구·예술체육요원·승선근무예비역', cap: 100, military: true },
+  { id: 'lecFull', label: '유·초·중등 강사 (전일제)', cap: 100 },
+  { id: 'lecPart', label: '유·초·중등 강사 (시간제)', hours: 'k12' },
+  { id: 'univLec', label: '대학 시간강사', hours: 'univ' },
+  { id: 'research', label: '대학·연구기관 연구원', cap: 100 },
+  { id: 'master', label: '석사 학위과정 (수업연한, 최대 2년)', cap: 100 },
+  { id: 'doctor', label: '박사 학위과정 (수업연한, 최대 3년)', cap: 100 },
+  { id: 'staff80', label: '학교회계직 (같은 분야 교원자격 취득 후)', cap: 80 },
+  { id: 'staff50', label: '학교회계직·교육공무직 (그 밖)', cap: 50 },
+  { id: 'lawyer', label: '변호사·법무사 법률사무', cap: 70 },
+  { id: 'union', label: '교원단체·교원노조·대안교육 위탁기관', cap: 70 },
+  { id: 'religion', label: '비영리 종교법인 교육활동', cap: 60 },
+  { id: 'pubcorp', label: '공공법인(행정·경영·연구·과학기술)', cap: 50 },
+  { id: 'overseas', label: '재외교육기관·재외교육단체', cap: 50 },
+  { id: 'academy', label: '학원·교습소 (강사 등록·신고)', cap: 50 },
+  { id: 'academy30', label: '학원·교습소 (강사 미등록·미신고)', cap: 30 },
+  { id: 'company', label: '상법상 회사 (외국회사 포함)', cap: 40 },
+  { id: 'etc', label: '개인회사·그 밖의 직업', cap: 30 },
+  { id: 'custom', label: '직접 입력 (상향 인정 등, 최대 100%)', cap: 100 },
+];
+const TYPE = Object.fromEntries(TYPES.map(t => [t.id, t]));
+function k12Base(sDay) {
+  if (sDay <= toDay('2005-02-28')) return 44;
+  if (sDay <= toDay('2006-02-28')) return 43;
+  if (sDay <= toDay('2012-02-29')) return 42;
+  return 40;
+}
+function rateOf(row) {
+  const t = TYPE[row.type];
+  if (t.hours === 'k12') {
+    const h = Number(row.hours) || 0, base = k12Base(toDay(row.start));
+    if (h <= 12) return { n: 30, d: 100, base };
+    return { n: Math.min(h, base), d: base, base };
+  }
+  if (t.hours === 'univ') {
+    const h = Math.floor(Number(row.hours) || 0);
+    const p = h <= 5 ? 50 : h >= 10 ? 100 : 50 + (h - 5) * 10;
+    return { n: p, d: 100 };
+  }
+  let p = row.rate === '' || row.rate == null ? t.cap : Number(row.rate);
+  if (!(p >= 0)) p = t.cap;
+  p = Math.min(p, t.cap);
+  return { n: Math.round(p * 100), d: 10000 };
+}
+function compute(inp) {
+  const schoolSet = new Set();
+  if (inp.enrol && inp.grad) {
+    const a = toDay(inp.enrol); let g = fromDay(toDay(inp.grad));
+    let b = toDay(inp.grad);
+    if (g.m === 2) b = Math.floor(Date.UTC(g.y, 2, 0) / DAY);
+    for (let x = a; x <= b; x++) schoolSet.add(x);
+  }
+  const rows = inp.rows.map((row, idx) => {
+    const ok = row.start && row.end && toDay(row.end) >= toDay(row.start);
+    return { id: row.id, idx, row, ok, rate: ok ? rateOf(row) : null };
+  });
+  const order = rows.filter(r => r.ok).sort((a, b) => (b.rate.n / b.rate.d) - (a.rate.n / a.rate.d) || a.idx - b.idx);
+  const claimed = new Set();
+  for (const r of order) {
+    const a = toDay(r.row.start), b = toDay(r.row.end), mil = TYPE[r.row.type].military;
+    let segs = [], cur = null, free = 0;
+    const mine = [];
+    for (let x = a; x <= b; x++) {
+      const blocked = claimed.has(x) || (!mil && schoolSet.has(x));
+      if (blocked) { if (cur) { segs.push(cur); cur = null; } }
+      else { free++; mine.push(x); if (cur && cur[1] === x - 1) cur[1] = x; else { if (cur) segs.push(cur); cur = [x, x]; } }
+    }
+    if (cur) segs.push(cur);
+    mine.forEach(x => claimed.add(x));
+    let M = 0, D = 0;
+    for (const [s, e] of segs) { const d = diffYMD(s, e + 1); M += d.M; D += d.D; }
+    r.raw = norm({ M, D });
+    r.excluded = (b - a + 1) - free;
+    r.conv = convert(r.raw.M, r.raw.D, r.rate);
+  }
+  let M = 0, D = 0;
+  for (const r of rows) if (r.ok) { M += r.conv.M; D += r.conv.D; }
+  const total = norm({ M, D });
+  const years = Math.floor(total.M / 12), remM = total.M % 12, remD = total.D;
+  const gak = inp.schoolYears - 16;
+  let step = inp.base + gak + inp.add + years;
+  const flags = [];
+  let final = step;
+  if (final > 40) { final = 40; flags.push('cap40'); }
+  if (final < 1) { final = 1; flags.push('floor1'); }
+  if (inp.limit14 && final > 14) { final = 14; flags.push('limit14'); }
+  const used = remM * 30 + remD;
+  const left = 360 - used;
+  return { rows, total, years, remM, remD, gak, step, final, flags, left: { M: Math.floor(left / 30), D: left % 30 } };
+}
+
+
+const $ = (s) => document.querySelector(s);
+let nextId = 1;
+const mk = (type, start, end) => ({ id: nextId++, type, start: start || '', end: end || '', rate: '', hours: '' });
+let rows = [mk('teacher', '2022-03-01', '2024-02-29'), mk('priv50', '2024-03-01', '2025-02-28')];
+
+const fmt = (x) => { const n = norm(x); return Math.floor(n.M / 12) + '년 ' + (n.M % 12) + '개월 ' + n.D + '일'; };
+const pct = (r) => { const v = r.n / r.d * 100; return (Math.round(v * 10) / 10) + '%'; };
+const typeOptions = (sel) => TYPES.map(t => '<option value="' + t.id + '"' + (t.id === sel ? ' selected' : '') + '>' + t.label + '</option>').join('');
+
+function renderRows() {
+  $('#rows').innerHTML = rows.map((r, i) => {
+    const t = TYPE[r.type];
+    let rateField;
+    if (t.hours === 'k12') rateField = '<label class="f">주당 근무시간<input type="number" class="f-hours" min="0" max="60" step="1" value="' + r.hours + '" placeholder="예: 20"></label>';
+    else if (t.hours === 'univ') rateField = '<label class="f">주당 수업시간<input type="number" class="f-hours" min="0" max="40" step="1" value="' + r.hours + '" placeholder="예: 6"></label>';
+    else rateField = '<label class="f">환산율 % (상한 ' + t.cap + ')<input type="number" class="f-rate" min="0" max="' + t.cap + '" step="1" value="' + r.rate + '" placeholder="' + t.cap + '"></label>';
+    return '<div class="row" data-id="' + r.id + '">' +
+      '<div class="row-head"><span class="rn">경력 ' + (i + 1) + '</span><button type="button" class="ghost f-del">삭제</button></div>' +
+      '<label class="f">유형<select class="f-type">' + typeOptions(r.type) + '</select></label>' +
+      '<div class="fields"><label class="f">시작일<input type="date" class="f-start" value="' + r.start + '"></label>' +
+      '<label class="f">종료일 (마지막 근무일)<input type="date" class="f-end" value="' + r.end + '"></label>' + rateField + '</div>' +
+      '<div class="line" id="line-' + r.id + '"></div></div>';
+  }).join('') || '<p class="hint" style="margin:0">경력이 없으면 비워 두세요. 아래 버튼으로 추가할 수 있습니다.</p>';
+}
+
+function update() {
+  const res = compute({
+    base: Number($('#qual').value), schoolYears: Number($('#school').value), add: Number($('#add').value),
+    enrol: $('#enrol').value, grad: $('#grad').value,
+    limit14: $('#m-tmp').checked && $('#limit14').checked, rows
+  });
+  for (const r of res.rows) {
+    const el = document.getElementById('line-' + r.id); if (!el) continue;
+    if (!r.ok) { el.innerHTML = '<span class="bad">시작일과 종료일을 확인하세요. 종료일이 시작일보다 빠를 수 없습니다.</span>'; continue; }
+    el.innerHTML = '인정 ' + fmt(r.raw) + ' × ' + pct(r.rate) + ' = <b>' + fmt(r.conv) + '</b>' +
+      (r.excluded ? ' <span class="ex">· 중복·재학으로 ' + r.excluded + '일 제외</span>' : '');
+  }
+  const base = Number($('#qual').value), add = Number($('#add').value);
+  let flags = '';
+  if (res.flags.includes('cap40')) flags += '<div class="flag">계산값이 ' + res.step + '호봉이라 최고 40호봉으로 표시했습니다.</div>';
+  if (res.flags.includes('floor1')) flags += '<div class="flag">계산값이 ' + res.step + '호봉이라 1호봉으로 표시했습니다. 학력과 자격을 다시 확인하세요.</div>';
+  if (res.flags.includes('limit14')) flags += '<div class="flag">기간제교사 14호봉 제한을 적용했습니다. 제한 없는 계산값은 ' + res.step + '호봉입니다.</div>';
+  const left = res.left.M + '개월 ' + res.left.D + '일';
+  $('#out').innerHTML =
+    '<div class="big">' + res.final + '<small>호봉</small></div>' +
+    '<p class="formula">기산 <b>' + base + '</b> ' + (res.gak < 0 ? '− ' : '+ ') + '학령 <b>' + Math.abs(res.gak) + '</b> + 가산 <b>' + add + '</b> + 경력 <b>' + res.years + '</b></p>' +
+    '<dl class="facts"><dt>환산 경력 합계</dt><dd>' + fmt(res.total) + '</dd>' +
+    '<dt>다음 승급기간에 넣는 잔여</dt><dd>' + res.remM + '개월 ' + res.remD + '일</dd>' +
+    '<dt>다음 승급까지</dt><dd>' + left + '</dd></dl>' + flags;
+  $('#bar').innerHTML = '<b>' + res.final + '호봉</b><span>환산 ' + fmt(res.total) + ' · 승급까지 ' + left + '</span>';
+}
+
+function markEdited() { $('#example').hidden = true; }
+
+$('#rows').addEventListener('input', (e) => {
+  const row = e.target.closest('.row'); if (!row) return;
+  const r = rows.find(x => x.id === Number(row.dataset.id));
+  if (e.target.classList.contains('f-start')) r.start = e.target.value;
+  else if (e.target.classList.contains('f-end')) r.end = e.target.value;
+  else if (e.target.classList.contains('f-rate')) r.rate = e.target.value;
+  else if (e.target.classList.contains('f-hours')) r.hours = e.target.value;
+  markEdited(); update();
+});
+$('#rows').addEventListener('change', (e) => {
+  if (!e.target.classList.contains('f-type')) return;
+  const r = rows.find(x => x.id === Number(e.target.closest('.row').dataset.id));
+  r.type = e.target.value; r.rate = ''; r.hours = '';
+  markEdited(); renderRows(); update();
+});
+$('#rows').addEventListener('click', (e) => {
+  if (!e.target.classList.contains('f-del')) return;
+  const id = Number(e.target.closest('.row').dataset.id);
+  rows = rows.filter(x => x.id !== id);
+  markEdited(); renderRows(); update();
+});
+$('#add-row').addEventListener('click', () => { rows.push(mk('teacher')); markEdited(); renderRows(); update(); });
+$('#clear-rows').addEventListener('click', () => { rows = []; markEdited(); renderRows(); update(); });
+['#qual', '#school', '#add', '#enrol', '#grad', '#limit14'].forEach(s => $(s).addEventListener('input', update));
+document.querySelectorAll('input[name=mode]').forEach(el => el.addEventListener('change', () => {
+  $('#limit-box').hidden = !$('#m-tmp').checked; update();
+}));
+
+renderRows(); update();
+</script>
+
+</body>
+</html>
